@@ -4,26 +4,38 @@ Add-Type -AssemblyName PresentationCore
 Add-Type -AssemblyName WindowsBase
 
 # Working folder = folder containing this script.
+# Input files are read only from .\i
+# Finished files are written directly to this working folder.
 $baseDir   = Split-Path -Parent $MyInvocation.MyCommand.Path
 $inputDir  = Join-Path $baseDir 'i'
-$outputDir = Join-Path $baseDir 'o'
+$outputDir = $baseDir
 
 function Read-TargetRatio {
     while ($true) {
         Write-Host ''
         Write-Host 'Choose target aspect ratio:'
-        Write-Host '  [1] 1.90:1'
-        Write-Host '  [2] 1.85:1'
-        Write-Host '  [3] 2.39:1'
+        Write-Host '  [1] 1.5:1'
+        Write-Host '  [2] 1.78:1'
+        Write-Host '  [3] 1.85:1'
+        Write-Host '  [4] 1.9:1'
+        Write-Host '  [5] 2.2:1'
+        Write-Host '  [6] 2.39:1'
+        Write-Host '  [7] 2.55:1'
+        Write-Host '  [8] 2.76:1'
         Write-Host '  [X] Custom X:1'
         Write-Host ''
 
         $choice = (Read-Host 'Selection').Trim()
 
         switch -Regex ($choice) {
-            '^(1|1\.9|1\.90)$' { return 1.90 }
-            '^(2|1\.85)$'      { return 1.85 }
-            '^(3|2\.39)$'      { return 2.39 }
+            '^(1|1\.5|1\.50)$' { return 1.50 }
+            '^(2|1\.78)$'      { return 1.78 }
+            '^(3|1\.85)$'      { return 1.85 }
+            '^(4|1\.9|1\.90)$' { return 1.90 }
+            '^(5|2\.2|2\.20)$' { return 2.20 }
+            '^(6|2\.39)$'      { return 2.39 }
+            '^(7|2\.55)$'      { return 2.55 }
+            '^(8|2\.76)$'      { return 2.76 }
 
             '^[xX]$' {
                 while ($true) {
@@ -50,7 +62,7 @@ function Read-TargetRatio {
             }
 
             default {
-                Write-Host 'Invalid selection. Use 1, 2, 3, or X.' -ForegroundColor Yellow
+                Write-Host 'Invalid selection. Use 1-8, X, or type one of the preset ratios directly.' -ForegroundColor Yellow
             }
         }
     }
@@ -58,6 +70,16 @@ function Read-TargetRatio {
 
 function Get-BestCrop([int]$w, [int]$h, [double]$ratio) {
     $current = $w / [double]$h
+
+    # Already at the requested ratio to floating-point precision.
+    if ([Math]::Abs($current - $ratio) -lt 0.0000000001) {
+        return [pscustomobject]@{
+            X = 0
+            Y = 0
+            W = $w
+            H = $h
+        }
+    }
 
     if ($current -gt $ratio) {
         # Too wide: preserve full height, crop left/right.
@@ -139,10 +161,9 @@ function Save-Jxr([string]$path, $crop, [bool]$compressedDomain) {
     $encoder.HorizontalTileSlices = 0
     $encoder.VerticalTileSlices = 0
 
-    # IMPORTANT:
-    # Keep this exactly like the already-tested single-file script.
-    # Do not attach source Metadata / Thumbnail / ColorContexts here;
-    # those can retain invalid native decoder handles after the source
+    # Keep the already-tested clean frame path.
+    # Do not attach source Metadata / Thumbnail / ColorContexts here:
+    # they can retain invalid native decoder handles after the source
     # stream has been closed.
     $encoder.Frames.Add(
         [System.Windows.Media.Imaging.BitmapFrame]::Create($crop)
@@ -167,10 +188,6 @@ if (-not (Test-Path -LiteralPath $inputDir -PathType Container)) {
     Write-Host 'ERROR: Input folder "i" does not exist.' -ForegroundColor Red
     Write-Host ('Create this folder: ' + $inputDir)
     exit 1
-}
-
-if (-not (Test-Path -LiteralPath $outputDir -PathType Container)) {
-    New-Item -ItemType Directory -Path $outputDir | Out-Null
 }
 
 $files = @(
@@ -209,9 +226,12 @@ $fallbackCount = 0
 
 for ($index = 0; $index -lt $files.Count; $index++) {
     $file = $files[$index]
+
+    # Output filename is strictly identical to the input filename.
     $outputPath = Join-Path $outputDir $file.Name
 
-    # Temp file remains a real .jxr file.
+    # Generate to a temporary JXR first. The final same-name file is
+    # replaced only after the new file passes verification.
     $tempName = '.__jxrcrop_' + [Guid]::NewGuid().ToString('N') + '.jxr'
     $tempPath = Join-Path $outputDir $tempName
 
@@ -262,14 +282,14 @@ for ($index = 0; $index -lt $files.Count; $index++) {
                 Remove-Item -LiteralPath $tempPath -Force -ErrorAction SilentlyContinue
             }
 
-            Write-Host ('Compressed-domain save failed; using lossless fallback.') -ForegroundColor DarkYellow
+            Write-Host 'Compressed-domain save failed; using lossless fallback.' -ForegroundColor DarkYellow
 
             Save-Jxr $tempPath $crop $false
             $mode = 'lossless floating-point re-encode'
             $fallbackCount++
         }
 
-        # Verify the newly generated file before touching an existing output.
+        # Verify the new file before touching an existing final output.
         $verify = Decode-Jxr $tempPath
 
         if (
@@ -283,7 +303,6 @@ for ($index = 0; $index -lt $files.Count; $index++) {
             throw "Verification failed: source is $sourceBpp bpp, output is $($verify.Format.BitsPerPixel) bpp."
         }
 
-        # Only now replace the same-name file in o.
         if (Test-Path -LiteralPath $outputPath) {
             Remove-Item -LiteralPath $outputPath -Force
         }
@@ -302,7 +321,6 @@ for ($index = 0; $index -lt $files.Count; $index++) {
         }
 
         $failed += $file.Name
-
         Write-Host ('FAILED: ' + $_.Exception.Message) -ForegroundColor Red
         Write-Host ''
     }

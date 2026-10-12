@@ -1,24 +1,35 @@
-﻿JXR Auto Crop v2
+﻿JXR Cropping
 
 Folder layout:
 
-  JXR-Auto-Crop.bat
-  JXR-Auto-Crop.ps1
+  Main.bat
+  cropping.ps1
 
   i\   <- put HDR .jxr source files here
-  o\   <- results appear here; created automatically if missing
 
-Double-click JXR-Auto-Crop.bat.
+Finished .jxr files are written directly to this folder, beside Main.bat and cropping.ps1.
+There is no output "o" folder.
+
+Double-click Main.bat.
 
 Choose:
-  1 = 1.90:1
-  2 = 1.85:1
-  3 = 2.39:1
+  1 = 1.5:1
+  2 = 1.78:1
+  3 = 1.85:1
+  4 = 1.9:1
+  5 = 2.2:1
+  6 = 2.39:1
+  7 = 2.55:1
+  8 = 2.76:1
   X = enter any custom X:1 ratio
+
+You may also type a preset ratio itself at the Selection prompt.
 
 Every .jxr directly inside i is center-cropped.
 No resizing is performed.
 Output filenames remain exactly unchanged.
-An existing same-name file in o is replaced only after the new file is successfully generated and verified.
 
-v2 fixes an E_HANDLE / "The handle is invalid" save error caused by carrying source metadata/color-context objects into the output frame after the decoder stream had been closed.
+If a same-name .jxr already exists beside the scripts, it is replaced only after the new temporary output has been successfully generated and verified for dimensions and bit depth.
+
+The HDR path remains the same as the previously working version:
+compressed-domain transcode is attempted first; if unavailable, the script uses the lossless floating-point JXR re-encode fallback.
